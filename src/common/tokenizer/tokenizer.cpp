@@ -82,14 +82,14 @@ std::unordered_map<uint32_t, uint8_t> Tokenizer::make_inverse_byte_map() {
 /// \param input the input
 /// \return the utf8 string
 std::string Tokenizer::cpt_to_utf8(const std::string& input) {
+    static const std::string pattern = "▁";
+    static const size_t pattern_size = pattern.size();
     static auto inv_map = this->make_inverse_byte_map();
     std::string output = "";
     output.reserve(input.size());
     size_t i = 0;
     if (!this->is_doubled_encoded) { // simply do pattern substitution of "▁" to " ", temporary solution
         std::string output = "";
-        static constexpr std::string pattern = "▁";
-        static constexpr size_t pattern_size = pattern.size();
         for (size_t i = 0; i < input.size(); i++) {
             if (i <= input.size() - pattern_size && input.substr(i, pattern_size) == pattern) {
                 output += " ";

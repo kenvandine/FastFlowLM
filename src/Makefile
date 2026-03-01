@@ -10,8 +10,8 @@ ifeq ($(OS),Windows_NT)
 all:
 	@$(PWSH) "if (!(Test-Path '$(BUILD_DIR)')) { New-Item -ItemType Directory -Path '$(BUILD_DIR)' }"
 	@$(PWSH) "if (!(Test-Path '$(OUT_DIR)'))   { New-Item -ItemType Directory -Path '$(OUT_DIR)' }"
-	@$(PWSH) "cd '$(BUILD_DIR)'; cmake .."
-	@$(PWSH) "cd '$(BUILD_DIR)'; cmake --build . --config Release --parallel 4"
+	@$(PWSH) "cmake --preset windows-default"
+	@$(PWSH) "cmake --build build --preset windows-default"
 
 run:
 	@$(PWSH) "Copy-Item 'lib\\*.dll' '$(OUT_DIR)' -Force"

@@ -4,7 +4,7 @@
 
 AppName=flm
 
-AppVersion=0.9.34
+AppVersion=0.9.35
 
 AppPublisher=FastFlowLM
 

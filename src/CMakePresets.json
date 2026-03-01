@@ -2,9 +2,17 @@
   "version": 3,
   "configurePresets": [
     {
+      "name": "common-default",
+      "hidden": true,
+      "cacheVariables": {
+        "FLM_VERSION": "0.9.35"
+      }
+    },
+    {
       "name": "linux-default",
       "displayName": "Linux Default",
       "description": "Default configuration for Linux",
+      "inherits": "common-default",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
@@ -17,11 +25,22 @@
       "name": "windows-default",
       "displayName": "Windows Default",
       "description": "Default configuration for Windows using Visual Studio",
+      "inherits": "common-default",
       "generator": "Visual Studio 17 2022",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-default",
+      "displayName": "Windows Default Build",
+      "description": "Build Windows preset in Release with parallel jobs",
+      "configurePreset": "windows-default",
+      "configuration": "Release",
+      "jobs": 4
     }
   ]
 }

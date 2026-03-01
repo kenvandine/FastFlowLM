@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.22)
 project(flm LANGUAGES CXX VERSION 0.1.0)
 
+set(FLM_VERSION "0.9.34" CACHE STRING "FastFlowLM version string embedded at compile time")
+
 # Set build type to Release
 set(CMAKE_BUILD_TYPE Release)
 
@@ -121,6 +123,7 @@ target_compile_definitions(flm PUBLIC
     DISABLE_ABI_CHECK=1
     CMAKE_INSTALL_PREFIX="${CMAKE_INSTALL_PREFIX}"
     CMAKE_XCLBIN_PREFIX="${CMAKE_XCLBIN_PREFIX}"
+    __FLM_VERSION__=\"${FLM_VERSION}\"
 )
 
 if(WIN32)

@@ -18,6 +18,8 @@
 #include <string>
 #include <thread>
 #include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include <filesystem>
 #include <cstdlib>
 #ifdef _WIN32
@@ -50,6 +52,8 @@
 // Global variables
 ///@brief should_exit is used to control the server thread
 std::atomic<bool> should_exit(false);
+std::mutex exit_mutex;
+std::condition_variable exit_cv;
 
 #ifndef _WIN32
 ///@brief Preload critical XRT libraries from the executable directory
@@ -155,11 +159,17 @@ void handle_user_input(bool sub_process_mode) {
     std::string input;
     while (!should_exit) {
         if (!sub_process_mode){
-            header_print("FLM", "Enter 'exit' to stop the server: ");
+            header_print("FLM", "Enter 'exit' or use 'Ctrl+C' to stop the server: ");
         }
         if (!std::getline(std::cin, input)) {
             // Handle EOF or input error to avoid spinning in a tight loop
             should_exit = true;
+            exit_cv.notify_all();
+            break;
+        }
+        if (input == "exit") {
+            should_exit = true;
+            exit_cv.notify_all();
             break;
         }
     }
@@ -576,9 +586,10 @@ int main(int argc, char* argv[]) {
             // Start a thread to handle user input, this thread will be used to handle the user input
             std::thread input_thread(handle_user_input, parsed_args.sub_process_mode);
 
-            // Wait for exit command, this thread will be used to wait for the user to exit the server
-            while (!should_exit) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            // Wait for exit signal without polling to reduce CPU usage
+            {
+                std::unique_lock<std::mutex> lock(exit_mutex);
+                exit_cv.wait(lock, [] { return should_exit.load(); });
             }
 
             // Cleanup, this will be used to stop the server
