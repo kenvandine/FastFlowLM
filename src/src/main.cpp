@@ -467,7 +467,7 @@ std::string get_driver_version(const std::string& device_name) {
             driver_version = wmi::get_property_string(pObj, L"DriverVersion");
         }
         });
-#elif
+#else
     driver_version = "";
 #endif
 
