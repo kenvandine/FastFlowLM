@@ -245,8 +245,51 @@ std::string get_models_directory() {
 #endif
 }
 
+#ifdef _WIN32
+std::string get_driver_version(const std::string& device_name) {
+    std::string driver_version;
+    wmi::WMIConnection wmi;
+    if (!wmi.is_valid()) {
+        return "";
+    }
+
+    std::wstring query = L"SELECT * FROM Win32_PnPSignedDriver WHERE DeviceName LIKE '%" +
+        wmi::string_to_wstring(device_name) + L"%'";
+
+    wmi.query(query, [&driver_version](IWbemClassObject* pObj) {
+        if (driver_version.empty()) {  // Only get first match
+            driver_version = wmi::get_property_string(pObj, L"DriverVersion");
+        }
+        });
+
+    return driver_version;
+}
+
+std::string identify_npu_arch() {
+    wmi::WMIConnection wmi_conn;
+    if (!wmi_conn.is_valid()) {
+        return "";
+    }
+
+    // XDNA2 NPU: AMD vendor 1022, device 17F0
+    bool found_xdna2 = false;
+    wmi_conn.query(
+        L"SELECT PNPDeviceID FROM Win32_PnPEntity WHERE PNPDeviceID LIKE '%VEN_1022&DEV_17F0%'",
+        [&found_xdna2](IWbemClassObject* pObj) {
+            found_xdna2 = true;
+        });
+
+    if (found_xdna2) {
+        return "XDNA2";
+    }
+    return "";
+}
+
+#endif
+
 static bool sanity_check_npu_stack(bool quiet, bool json_output = false) {
     bool print_human = !quiet && !json_output;
+#ifndef _WIN32
     nlohmann::json validation_json = {
         {"object", "npu_stack_validation"},
         {"platform", "windows"},
@@ -256,9 +299,8 @@ static bool sanity_check_npu_stack(bool quiet, bool json_output = false) {
         {"enough_cols", true},
         {"memlock_ok", true},
         {"devices", nlohmann::json::array()},
-        {"ok", true}
+        {"ready", true}
     };
-#ifndef _WIN32
     validation_json["platform"] = "linux";
     // Check kernel version
     struct utsname u_name;
@@ -266,7 +308,7 @@ static bool sanity_check_npu_stack(bool quiet, bool json_output = false) {
         if (print_human)
             perror("Failed to get kernel version");
         validation_json["kernel_ok"] = false;
-        validation_json["ok"] = false;
+        validation_json["ready"] = false;
         if (json_output) {
             std::cout << validation_json.dump(4) << std::endl;
         }
@@ -281,7 +323,7 @@ static bool sanity_check_npu_stack(bool quiet, bool json_output = false) {
         if (print_human) {
             header_print_r("ERROR", "Kernel version incompatible with this version of FLM. Please update your kernel!");
         }
-        validation_json["ok"] = false;
+        validation_json["ready"] = false;
         if (json_output) {
             std::cout << validation_json.dump(4) << std::endl;
         }
@@ -427,13 +469,56 @@ static bool sanity_check_npu_stack(bool quiet, bool json_output = false) {
     validation_json["memlock_ok"] = memlock_ok;
 
     bool overall_ok = amd_device_found && kernel_ok && all_fw_ok && enough_cols && memlock_ok;
-    validation_json["ok"] = overall_ok;
+    validation_json["ready"] = overall_ok;
     if (json_output) {
         std::cout << validation_json.dump(4) << std::endl;
     }
 
     return overall_ok;
 #else
+    nlohmann::json validation_json = {
+        {"object", "npu_stack_validation"},
+        {"platform", "windows"},
+        {"amd_device_found", true},
+        {"npu_driver_ok", true},
+        {"ready", true}
+    };
+    std::string npu_arch = identify_npu_arch();
+    if (npu_arch.empty()) {
+        if (print_human)
+            header_print("Error", "No XDNA2 NPU hardware detected");
+        validation_json["ready"] = false;
+        validation_json["amd_device_found"] = false;
+        if (json_output) {
+            std::cout << validation_json.dump(4) << std::endl;
+        }
+        return false;
+    }
+
+    std::string min_drv = __NPU_VERSION__;
+    std::string drv = get_driver_version("NPU Compute Accelerator Device");
+    int mver_0, mver_1, mver_2, mver_3;
+    int ver_0, ver_1, ver_2, ver_3;
+    sscanf(min_drv.c_str(), "%d.%d.%d.%d", &mver_0, &mver_1, &mver_2, &mver_3);
+    sscanf(drv.c_str(), "%d.%d.%d.%d", &ver_0, &ver_1, &ver_2, &ver_3);
+
+    if (ver_3 < mver_3) {
+        if (print_human) {
+            header_print("Error", "NPU driver version doesn't meet the minimum!");
+        }
+        validation_json["ready"] = false;
+        validation_json["npu_driver_ok"] = false;
+        if (json_output) {
+            std::cout << validation_json.dump(4) << std::endl;
+        }
+        return false;
+    }
+
+    if (print_human) {
+        header_print_g("Windows", "NPU: " << npu_arch);
+        header_print_g("Windows", "NPU dirver version: " << drv);
+    }
+
     if (json_output) {
         std::cout << validation_json.dump(4) << std::endl;
     }
@@ -441,29 +526,6 @@ static bool sanity_check_npu_stack(bool quiet, bool json_output = false) {
 #endif
 }
 
-
-std::string get_driver_version(const std::string& device_name) {
-    std::string driver_version;
-#ifdef _WIN32
-    wmi::WMIConnection wmi;
-    if (!wmi.is_valid()) {
-        return "";
-    }
-
-    std::wstring query = L"SELECT * FROM Win32_PnPSignedDriver WHERE DeviceName LIKE '%" +
-        wmi::string_to_wstring(device_name) + L"%'";
-
-    wmi.query(query, [&driver_version](IWbemClassObject* pObj) {
-        if (driver_version.empty()) {  // Only get first match
-            driver_version = wmi::get_property_string(pObj, L"DriverVersion");
-        }
-        });
-#else
-    driver_version = "";
-#endif
-
-    return driver_version;
-}
 
 ///@brief main function
 ///@param argc the number of arguments
@@ -553,16 +615,6 @@ int main(int argc, char* argv[]) {
             std::cout << "{ \"port\": " << get_server_port(parsed_args.port) << " }" << std::endl;
         } else {
             std::cout << "Server Port: " << get_server_port(parsed_args.port) << std::endl;
-        }
-        return 0;
-    }
-
-    if (parsed_args.command == "driver") {
-        if (parsed_args.json_output) {
-            std::cout << "{ \"NPU Driver Version\": \"" << get_driver_version("NPU Compute Accelerator Device") << "\" }" << std::endl;
-        }
-        else {
-            std::cout << "NPU Driver Version: " << get_driver_version("NPU Compute Accelerator Device") << std::endl;
         }
         return 0;
     }

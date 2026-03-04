@@ -30,7 +30,6 @@ inline void print_help(po::options_description& general) {
     std::cout << "  help                - Show this help message" << std::endl;
     std::cout << "  port                - Show the default server port" << std::endl;
     std::cout << "  validate            - Validate the NPU stack" << std::endl;
-    std::cout << "  driver              - Check the NPU driver version" << std::endl;
     std::cout << std::endl;
     std::cout << general << std::endl;
     std::cout << "Examples:" << std::endl;
@@ -157,9 +156,6 @@ bool parse_options(int argc, char *argv[], program_args_t& parsed_args) {
                 return true;
             }
             if (parsed_args.command == "validate") {
-                return true;
-            }
-            if (parsed_args.command == "driver") {
                 return true;
             }
         } else {
