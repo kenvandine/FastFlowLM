@@ -451,13 +451,25 @@ static bool sanity_check_npu_stack(bool quiet, bool json_output = false) {
             ? "infinity"
             : std::to_string(static_cast<unsigned long long>(rl.rlim_cur));
         if (rl.rlim_cur != RLIM_INFINITY && rl.rlim_cur < 100 * 1024 * 1024) {
-            struct rlimit rl_new = { RLIM_INFINITY, RLIM_INFINITY };
+            // First try raising soft limit to the hard limit (no elevated privileges needed).
+            // If the hard limit is also too low, attempt to raise both to infinity (requires
+            // CAP_SYS_RESOURCE or root).
+            rlim_t target = (rl.rlim_max == RLIM_INFINITY || rl.rlim_max >= 100 * 1024 * 1024)
+                                ? rl.rlim_max
+                                : RLIM_INFINITY;
+            struct rlimit rl_new = { target, target };
             if (setrlimit(RLIMIT_MEMLOCK, &rl_new) == 0) {
-                rl.rlim_cur = RLIM_INFINITY;
-                rl.rlim_max = RLIM_INFINITY;
-                validation_json["memlock_limit"] = "infinity";
-                if (print_human)
-                    header_print_g("Linux", "Memlock Limit: set to infinity");
+                rl.rlim_cur = target;
+                rl.rlim_max = target;
+                if (target == RLIM_INFINITY) {
+                    validation_json["memlock_limit"] = "infinity";
+                    if (print_human)
+                        header_print_g("Linux", "Memlock Limit: set to infinity");
+                } else {
+                    validation_json["memlock_limit"] = std::to_string(static_cast<unsigned long long>(target));
+                    if (print_human)
+                        header_print_g("Linux", "Memlock Limit: raised to " << (target / 1024 / 1024) << " MB");
+                }
             } else {
                 if (print_human) {
                     header_print_r("ERROR", "Memlock limit is too low (" << (rl.rlim_cur / 1024 / 1024) << "MB). Please raise the limit or set to infinity.");
