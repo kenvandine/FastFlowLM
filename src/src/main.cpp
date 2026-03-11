@@ -454,9 +454,16 @@ static bool sanity_check_npu_stack(bool quiet, bool json_output = false) {
             // First try raising soft limit to the hard limit (no elevated privileges needed).
             // If the hard limit is also too low, attempt to raise both to infinity (requires
             // CAP_SYS_RESOURCE or root).
+            std::string soft_str = (rl.rlim_cur == RLIM_INFINITY) ? "infinity" : std::to_string(rl.rlim_cur / 1024 / 1024) + "MB";
+            std::string hard_str = (rl.rlim_max == RLIM_INFINITY) ? "infinity" : std::to_string(rl.rlim_max / 1024 / 1024) + "MB";
+            if (print_human)
+                header_print("Linux", "Memlock soft=" << soft_str << " hard=" << hard_str << " — attempting to raise");
             rlim_t target = (rl.rlim_max == RLIM_INFINITY || rl.rlim_max >= 100 * 1024 * 1024)
                                 ? rl.rlim_max
                                 : RLIM_INFINITY;
+            std::string target_str = (target == RLIM_INFINITY) ? "infinity" : std::to_string(target / 1024 / 1024) + "MB";
+            if (print_human)
+                header_print("Linux", "Memlock target=" << target_str);
             struct rlimit rl_new = { target, target };
             if (setrlimit(RLIMIT_MEMLOCK, &rl_new) == 0) {
                 rl.rlim_cur = target;
@@ -471,8 +478,11 @@ static bool sanity_check_npu_stack(bool quiet, bool json_output = false) {
                         header_print_g("Linux", "Memlock Limit: raised to " << (target / 1024 / 1024) << " MB");
                 }
             } else {
+                int saved_errno = errno;
                 if (print_human) {
-                    header_print_r("ERROR", "Memlock limit is too low (" << (rl.rlim_cur / 1024 / 1024) << "MB). Please raise the limit or set to infinity.");
+                    header_print_r("ERROR", "Memlock limit is too low (" << soft_str << " soft, " << hard_str << " hard). "
+                        "setrlimit to " << target_str << " failed: " << strerror(saved_errno) << " (errno=" << saved_errno << "). "
+                        "Please raise the limit or set to infinity.");
                 }
                 memlock_ok = false;
             }
